@@ -1,0 +1,57 @@
+name: Build Linux
+
+on: push
+
+env:
+  option_path: options/options_opencv4.9.0_contrib_vc16.txt
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: ["ubuntu:20.04", "ubuntu:22.04", "ubuntu:23.04", "ubuntu:23.10"]
+    container:
+      image: ${{matrix.os}}
+      options: --privileged
+    steps:
+    - name: Setup things in container
+      run: |
+        apt-get update
+        apt-get install -y --no-install-recommends sudo wget git build-essential debconf-utils apt-utils dialog ca-certificates
+        echo 'tzdata tzdata/Areas select Etc' | sudo debconf-set-selections
+        echo 'tzdata tzdata/Zones/Etc select UTC' | sudo debconf-set-selections
+        DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
+
+    - uses: actions/checkout@v2
+    - name: Download OpenCV repo/s
+      run: |
+        scripts/linux/download.sh $option_path
+    - name: Build OpenCV
+      run: |
+        scripts/linux/build.sh $option_path
+
+    - name: Remove build folder
+      uses: JesseTG/rm@v1.0.3
+      with:
+        path: build
+
+    - name: Create Tarball
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        asset_name=opencv-${{github.ref_name}}-${{ matrix.os }}.tar.gz
+        asset_name=$(echo $asset_name | sed 's/:/-/g')
+        tar -czf ${asset_name} install
+        echo "ASSET_NAME=${asset_name}" >> $GITHUB_ENV
+
+    - name: Upload Release Asset
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ env.ASSET_NAME }}
+        tag_name: ${{ github.ref_name }}
+        name: ${{ github.ref_name }}
+        draft: false
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

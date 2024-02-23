@@ -1,6 +1,5 @@
 #!/bin/bash
-# DO NOT USE
-# WORK IN PROGRESS
+# Seems to work!
 
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 cd $SCRIPTPATH/../..
@@ -211,15 +210,25 @@ if [ "$custom_build_options" == "NA" ]; then
     fi
 
     # install deps
-    sudo apt-get install libjpeg8-dev libtiff5-dev libjasper-dev libpng12-dev
-    sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libv4l-dev
-    sudo apt-get install libxvidcore-dev libx264-dev
-    sudo apt-get install libgtk-3-dev
-    sudo apt-get install build-essential cmake pkg-config
-    sudo apt-get install libatlas-base-dev gfortran
+    export DEBIAN_FRONTEND=noninteractive
+
+    sudo apt-get install -y --no-install-recommends libjpeg-dev libtiff-dev libpng-dev
+    sudo apt-get install -y --no-install-recommends libavcodec-dev libavformat-dev libswscale-dev libv4l-dev
+    sudo apt-get install -y --no-install-recommends libxvidcore-dev libx264-dev
+    sudo apt-get install -y --no-install-recommends libgtk-3-dev
+    sudo apt-get install -y --no-install-recommends build-essential cmake pkg-config
+    sudo apt-get install -y --no-install-recommends libatlas-base-dev gfortran
 
     # build opencv release
     cd $build_release_folder
+    
+    GCC_VERSION=$(gcc -dumpversion | cut -d. -f1)
+    if [[ "$GCC_VERSION" -gt 11 ]]; then
+        sudo apt-get install -y --no-install-recommends  gcc-11 g++-11
+        echo "Setting GCC to version 11"
+        export CC=gcc-11
+        export CXX=g++-11
+    fi
 
     cmake \
       -D CMAKE_BUILD_TYPE=RELEASE \
@@ -227,7 +236,9 @@ if [ "$custom_build_options" == "NA" ]; then
       -D BUILD_opencv_world=$cmake_build_world \
       -D WITH_CUDA=$cmake_with_cuda \
       -D ENABLE_FAST_MATH=$cmake_enable_fast_math \
-      -D CUDA_FAST_MATH=$cmake_cuda_fast_math \
+      -D CUDA_FAST_MATH=$cmake_cuda_fast_math \\
+      -D CUDA_ARCH_BIN="5.0 5.2 6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0" \
+      -D CUDA_ARCH_PTX="9.0" \
       -D WITH_CUBLAS=$cmake_with_cublas \
       -D WITH_FFMPEG=1 \
       -D INSTALL_PYTHON_EXAMPLES=$cmake_build_python_release_examples \
@@ -249,6 +260,8 @@ if [ "$custom_build_options" == "NA" ]; then
             -D ENABLE_FAST_MATH=$cmake_enable_fast_math \
             -D CUDA_FAST_MATH=$cmake_cuda_fast_math \
             -D WITH_CUBLAS=$cmake_with_cublas \
+            -D CUDA_ARCH_BIN="5.0 5.2 6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0" \
+            -D CUDA_ARCH_PTX="9.0" \
             -D WITH_FFMPEG=1 \
             -D INSTALL_PYTHON_EXAMPLES=$cmake_build_python_debug_examples \
             -D OPENCV_EXTRA_MODULES_PATH=$cmake_extra_modules_path \
@@ -259,9 +272,13 @@ if [ "$custom_build_options" == "NA" ]; then
             $cmake_addition_build_options ../..
     fi
 
+    if "$with_cuda" == "true" ]; then
+        export CUDNN_LIBRARY=/usr/local/cuda-12/lib64
+    fi
+
     # install opencv release
     cd $build_release_folder
-    make -j$((`nproc`+1))
+    make -j$((`nproc`+1)) 
     make install
 
     if [ "$with_debug" == "true" ]; then

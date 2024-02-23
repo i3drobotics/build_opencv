@@ -1,0 +1,56 @@
+name: Build Windows CUDA
+
+on: push
+
+jobs:
+  build-windows:
+    runs-on: windows-2019
+    env:
+        CUDNN_URL: https://developer.download.nvidia.com/compute/redist/cudnn/v8.8.0/local_installers/12.0/cudnn_8.8.0.121_windows.exe
+    steps:
+
+    - name: Set up MSBuild path
+      uses: microsoft/setup-msbuild@v1.0.2
+
+    #- name: Download cuDNN installer
+    #  run: Invoke-WebRequest -Uri "${{ env.CUDNN_URL }}" -OutFile "cudnn_installer.exe"
+
+    #- name: Install cuDNN
+    #  run: Start-Process -FilePath "cudnn_installer.exe" -ArgumentList '/S' -Wait
+    
+    - name: Install CUDA 
+      uses: Jimver/cuda-toolkit@v0.2.14
+      id: cuda-toolkit
+
+    - uses: actions/checkout@v2
+
+    - name: Download OpenCV repo/s
+      working-directory: scripts/windows
+      shell: cmd
+      run: .\download.bat options\options_opencv4.9.0_contrib_vc16.txt
+
+    - name: Build OpenCV
+      working-directory: scripts/windows
+      shell: cmd
+      run: .\build.bat options\options_opencv4.9.0_contrib_vc16.txt
+
+    - name: Remove build folder
+      uses: JesseTG/rm@v1.0.3
+      with:
+        path: build
+
+    - run: Compress-Archive -Path install/* -Destination opencv-${{github.ref_name}}-windows-cuda12.zip
+
+    - name: Upload Release Asset
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: opencv-${{github.ref_name}}-windows-cuda12.zip
+        tag_name: ${{ github.ref_name }}
+        name: ${{ github.ref_name }}
+        draft: false
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    
